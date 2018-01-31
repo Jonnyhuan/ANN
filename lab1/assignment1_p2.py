@@ -17,16 +17,19 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
-TRAIN_DATA_NUM = 100	#训练集大小
-TEST_DATA_NUM = 50		#测试集大小	
+TRAIN_DATA_NUM = 800	#训练集大小
+VALID_DATA_NUM = 200	#训练集大小
+TEST_DATA_NUM = 200		#测试集大小	
 INODE_NUM = 5			#输入层节点数
-HNODE_NUM = 60			#中间层节点数
+HNODE_NUM = 8			#中间层节点数
 ONODE_NUM = 1			#输出层节点数
 
 START = 301
-TRAIN_END = 1301
-VALID_END = 1401
+TEST_START = 1301
 END = 1500
+
+INDEX_START = -100
+INDEX_END = 2000
 
 class Network(object):
 
@@ -89,7 +92,7 @@ class Network(object):
 			if validation_data:
 				error, validation_correct = self.evaluate(validation_data)
 				validation_error.append(error)
-				validation_accuracy.append(validation_correct/n)
+				validation_accuracy.append(validation_correct/n_valid)
 				print("Epoch {0}, validation set: {1} / {2}".format(j, validation_correct, n_valid))
 			else:
 				print("Epoch {0}, validation set complete".format(j))
@@ -101,6 +104,12 @@ class Network(object):
 				print("Epoch {0}, test set: {1} / {2}".format(j, test_correct, n_test))
 			else:
 				print("Epoch {0}, test set complete".format(j))
+
+		test_range = [x for x in range(TEST_START,END+1)]
+		output = [float(self.feedforward(x)) for (x, y) in test_data]
+		plt.subplot(2,1,1)
+		plt.plot(test_range,output,'g--')
+		plt.legend()
 
 		plt.subplot(2,2,3)
 		plt.plot([x for x in range(epochs)], validation_accuracy, color="blue", label = "validation accuracy", linewidth=2.0, linestyle="-")
@@ -208,8 +217,8 @@ def sigmoid_prime(z):
 def data_set_generator():
 
 	y = []
-	t = [x for x in range(-100,3000)]
-	offset = t[0]
+	t = [x for x in range(INDEX_START,INDEX_END)]
+	offset = INDEX_START
 	for i in t:
 		if i < 0:
 			y.append(0)
@@ -222,18 +231,23 @@ def data_set_generator():
 
 	plt.subplot(2,1,1)
 	plt.plot(t,y,'r-')
-	plt.legend()
+	# plt.legend()
 
 	training_data = []
 	validation_data = []
 	test_data = []
-	for i in range(START-offset,END-offset+1):
-		if i < TRAIN_END:
+	training_range = [x for x in range(START-offset,TEST_START-offset)]
+	random.shuffle(training_range)
+	j = 0
+	for i in training_range:
+		if j < TRAIN_DATA_NUM:
 			training_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
-		elif i < VALID_END:
-			validation_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
 		else:
-			test_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+			validation_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+		j += 1
+
+	for i in range(TEST_START-offset,END-offset+1):
+		test_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
 
 	return training_data, validation_data, test_data
 
@@ -243,9 +257,9 @@ def main():
 	nn = Network(sizes)
 	
 	# # learning相关参数
-	eta = 0.1
+	eta = 0.3
 	epochs = 100
-	mini_batch_size = 20
+	mini_batch_size = 50
 
 	training_data, validation_data, test_data = data_set_generator()
 	nn.SGD(training_data, epochs, mini_batch_size, eta, validation_data, test_data)
