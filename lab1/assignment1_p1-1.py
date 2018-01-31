@@ -44,21 +44,20 @@ def data_set_generator(mu1, mu2, sigma1, sigma2):
 	return train_data, train_labels
 
 # one layer perceptron
-def perceptron(X, W, T, eta):
-	X = np.row_stack((X,np.ones((1, TRAIN_DATA_NUM))))
-	Y = np.dot(W,X) 
-	# print((Y-T))
-	delta_W = -eta*np.dot((Y-T), X.T)
-	W = W + delta_W
-	return W, Y
+def perceptron(x, w, t, eta):
+	x = np.row_stack((x,np.ones((1, TRAIN_DATA_NUM))))
+	y = np.dot(w,x) 
+	delta_w = -eta*np.dot((y-t), x.T)
+	w = w + delta_w
+	return w, y
 
-def sigmoid(X):
-	return 1/(1+np.exp(-X))
+def sigmoid(x):
+	return 1/(1+np.exp(-x))
 
-def threshold(X):
-	th = np.zeros(X.shape)
-	th[X>0] = 1
-	th[X<=0] = -1
+def threshold(x):
+	th = np.zeros(x.shape)
+	th[x>0] = 1
+	th[x<=0] = -1
 	return th
 
 # def eval(Y, T):
@@ -78,27 +77,24 @@ def data_set_shuffle(train_data, train_labels):
 
 
 def train(train_data, train_labels, epochs, eta):
-	W = np.random.randn(ONODE_NUM, INODE_NUM+1)
+	w = np.random.randn(ONODE_NUM, INODE_NUM+1)
 	i = 0
 	while i < epochs:
 		# train_data, train_labels = data_set_shuffle(train_data, train_labels)
 		# delta rule updating W
-		W, Y = perceptron(train_data, W, train_labels, eta)
+		w, y = perceptron(train_data, w, train_labels, eta)
 	
-		# print((Y-train_labels))
-		# evaluating results
-		# print(Y)
-		output = threshold(Y)
-		error = np.sum(np.power((Y-train_labels),2))/2
+		output = threshold(y)
+		error = np.sum(np.power((y-train_labels),2))/2
 		accuracy = np.sum(output == train_labels) / TRAIN_DATA_NUM
 		print("epoch:{}, accuracy is:{}, error is:{} ...\n".format(i, accuracy, error))
-		if accuracy == 0:
-			print("Y:{}, train labels are:{}".format(np.sum(Y), np.sum(train_labels)))
-			print(output)
-			print(train_labels)
+		# if accuracy == 0:
+		# 	print("y:{}, train labels are:{}".format(np.sum(y), np.sum(train_labels)))
+		# 	print(output)
+		# 	print(train_labels)
 
 		x = np.linspace(-4, 4, 100)
-		speratingLine = -W[0,0]/W[0,1]*x - W[0,2]/W[0,1]
+		speratingLine = -w[0,1]/w[0,0]*x - w[0,2]/w[0,0]
 		plt.plot(x,speratingLine)
 		plt.pause(0.2)
 		# eta *= 0.9
