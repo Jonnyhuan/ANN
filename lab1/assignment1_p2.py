@@ -56,7 +56,7 @@ class Network(object):
 			a = sigmoid(np.dot(w, a)+b)
 		return a
 
-	def SGD(self, training_data, epochs, mini_batch_size, eta, validation_data = None, test_data=None):
+	def SGD(self, training_data, epochs, mini_batch_size, eta, weight_decay = 0, validation_data = None, test_data=None):
 		"""Train the neural network using mini-batch stochastic
 		gradient descent.  The ``training_data`` is a list of tuples
 		``(x, y)`` representing the training inputs and the desired
@@ -78,32 +78,36 @@ class Network(object):
 		train_error = []
 		train_accuracy = []
 		for j in range(epochs):
-			random.shuffle(training_data)
+			# random.shuffle(training_data)
 			mini_batches = [
 				training_data[k:k+mini_batch_size]
 				for k in range(0, n, mini_batch_size)]
 			for mini_batch in mini_batches:
-				self.update_mini_batch(mini_batch, eta)
+				self.update_mini_batch(mini_batch, eta, weight_decay)
 
 			# error, train_correct = self.evaluate(training_data)
 			# train_error.append(error)
 			# train_accuracy.append(train_correct/n)
 
 			if validation_data:
-				error, validation_correct = self.evaluate(validation_data)
+				# error, validation_correct = self.evaluate(validation_data)
+				error = 0
+				test_correct = 0
 				validation_error.append(error)
 				validation_accuracy.append(validation_correct/n_valid)
-				print("Epoch {0}, validation set: {1} / {2}".format(j, validation_correct, n_valid))
-			else:
-				print("Epoch {0}, validation set complete".format(j))
+				# print("Epoch {0}, validation set: {1} / {2}".format(j, validation_correct, n_valid))
+			# else:
+				# print("Epoch {0}, validation set complete".format(j))
 
 			if test_data:
-				error, test_correct = self.evaluate(test_data)
+				# error, test_correct = self.evaluate(test_data)
+				error = 0
+				test_correct = 0
 				test_error.append(error)
 				test_accuracy.append(test_correct/n_test)
-				print("Epoch {0}, test set: {1} / {2}".format(j, test_correct, n_test))
-			else:
-				print("Epoch {0}, test set complete".format(j))
+				# print("Epoch {0}, test set: {1} / {2}".format(j, test_correct, n_test))
+			# else:
+				# print("Epoch {0}, test set complete".format(j))
 
 		test_range = [x for x in range(TEST_START,END+1)]
 		output = [float(self.feedforward(x)) for (x, y) in test_data]
@@ -122,7 +126,7 @@ class Network(object):
 		plt.plot([x for x in range(epochs)], test_error, color="red", label = "test error", linewidth=2.0, linestyle="-")
 		plt.legend()
 
-	def update_mini_batch(self, mini_batch, eta):
+	def update_mini_batch(self, mini_batch, eta, weight_decay=0):
 		"""Update the network's weights and biases by applying
 		gradient descent using backpropagation to a single mini batch.
 		The ``mini_batch`` is a list of tuples ``(x, y)``, and ``eta``
@@ -133,9 +137,9 @@ class Network(object):
 			delta_nabla_b, delta_nabla_w = self.backprop(x, y)
 			nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
 			nabla_w = [nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
-		self.weights = [w-(eta/len(mini_batch))*nw
+		self.weights = [(1-eta*weight_decay/len(mini_batch))*w-(eta/len(mini_batch))*nw
 						for w, nw in zip(self.weights, nabla_w)]
-		self.biases = [b-(eta/len(mini_batch))*nb
+		self.biases = [b-(eta*weight_decay/len(mini_batch))*nb
 					   for b, nb in zip(self.biases, nabla_b)]
 
 	def backprop(self, x, y):
@@ -241,15 +245,18 @@ def data_set_generator():
 	j = 0
 	for i in training_range:
 		if j < TRAIN_DATA_NUM:
-			training_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+			# training_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+			training_data.append([y[i-20], y[i-15], y[i-10],y[i-5], y[i], y[i+5]])
 		else:
-			validation_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+			# validation_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+			validation_data.append([y[i-20], y[i-15], y[i-10],y[i-5], y[i], y[i+5]])
 		j += 1
 
 	for i in range(TEST_START-offset,END-offset+1):
-		test_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+		# test_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
+		test_data.append([y[i-20], y[i-15], y[i-10],y[i-5], y[i], y[i+5]])
 
-	return training_data, validation_data, test_data
+	return np.array(training_data), validation_data, test_data
 
 # 主函数
 def main():
@@ -258,11 +265,12 @@ def main():
 	
 	# # learning相关参数
 	eta = 0.3
-	epochs = 100
-	mini_batch_size = 50
+	epochs = 1000
+	mini_batch_size = 20
+	weight_decay_lamda = 0
 
 	training_data, validation_data, test_data = data_set_generator()
-	nn.SGD(training_data, epochs, mini_batch_size, eta, validation_data, test_data)
+	nn.SGD(training_data, epochs, mini_batch_size, eta, weight_decay_lamda, validation_data, test_data)
 
 	plt.show()
 
