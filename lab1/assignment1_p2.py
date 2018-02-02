@@ -17,6 +17,8 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 
+USE_TEST_SET = True
+USE_VALID_SET = True
 TRAIN_DATA_NUM = 800	#训练集大小
 VALID_DATA_NUM = 200	#训练集大小
 TEST_DATA_NUM = 200		#测试集大小	
@@ -53,10 +55,11 @@ class Network(object):
 	def feedforward(self, a):
 		"""Return the output of the network if ``a`` is input."""
 		for b, w in zip(self.biases, self.weights):
+			#print(w.shape, a.shape, b.shape)
 			a = sigmoid(np.dot(w, a)+b)
 		return a
 
-	def SGD(self, training_data, epochs, mini_batch_size, eta, weight_decay = 0, validation_data = None, test_data=None):
+	def SGD(self, training_data, epochs, mini_batch_size, eta, weight_decay = 0, validation_data=None, test_data=None):
 		"""Train the neural network using mini-batch stochastic
 		gradient descent.  The ``training_data`` is a list of tuples
 		``(x, y)`` representing the training inputs and the desired
@@ -65,54 +68,50 @@ class Network(object):
 		network will be evaluated against the test data after each
 		epoch, and partial progress printed out.  This is useful for
 		tracking progress, but slows things down substantially."""
-		if test_data: 
-			n_test = len(test_data)
+
+		if USE_TEST_SET: 
+			n_test = test_data.shape[1]
 			test_error = []
 			test_accuracy = []
-		if test_data: 
-			n_valid = len(validation_data)
+		if USE_VALID_SET: 
+			n_valid = validation_data.shape[1]
 			validation_error = []
 			validation_accuracy = []
 
-		n = len(training_data)
+		n = training_data.shape[1]
 		train_error = []
 		train_accuracy = []
 		for j in range(epochs):
 			# random.shuffle(training_data)
-			mini_batches = [
-				training_data[k:k+mini_batch_size]
-				for k in range(0, n, mini_batch_size)]
-			for mini_batch in mini_batches:
+			for k in range(0, n, mini_batch_size):
+				mini_batch = training_data[:, k:k+mini_batch_size]
 				self.update_mini_batch(mini_batch, eta, weight_decay)
 
 			# error, train_correct = self.evaluate(training_data)
 			# train_error.append(error)
 			# train_accuracy.append(train_correct/n)
 
-			if validation_data:
-				# error, validation_correct = self.evaluate(validation_data)
-				error = 0
-				test_correct = 0
-				validation_error.append(error)
-				validation_accuracy.append(validation_correct/n_valid)
+			if USE_VALID_SET:
+				mse, validation_correct_num = self.evaluate(validation_data)
+				validation_error.append(mse)
+				validation_accuracy.append(validation_correct_num/n_valid)
 				# print("Epoch {0}, validation set: {1} / {2}".format(j, validation_correct, n_valid))
 			# else:
 				# print("Epoch {0}, validation set complete".format(j))
 
-			if test_data:
-				# error, test_correct = self.evaluate(test_data)
-				error = 0
-				test_correct = 0
-				test_error.append(error)
-				test_accuracy.append(test_correct/n_test)
+			if USE_TEST_SET:
+				mse, test_correct_num = self.evaluate(test_data)
+				test_error.append(mse)
+				test_accuracy.append(test_correct_num/n_test)
 				# print("Epoch {0}, test set: {1} / {2}".format(j, test_correct, n_test))
 			# else:
 				# print("Epoch {0}, test set complete".format(j))
 
 		test_range = [x for x in range(TEST_START,END+1)]
-		output = [float(self.feedforward(x)) for (x, y) in test_data]
+		x = test_data[0:-1, :]
+		output = self.feedforward(x)
 		plt.subplot(2,1,1)
-		plt.plot(test_range,output,'g--')
+		plt.plot(test_range,output.flatten(),'g--')
 		plt.legend()
 
 		plt.subplot(2,2,3)
@@ -131,15 +130,20 @@ class Network(object):
 		gradient descent using backpropagation to a single mini batch.
 		The ``mini_batch`` is a list of tuples ``(x, y)``, and ``eta``
 		is the learning rate."""
-		nabla_b = [np.zeros(b.shape) for b in self.biases]
-		nabla_w = [np.zeros(w.shape) for w in self.weights]
-		for x, y in mini_batch:
-			delta_nabla_b, delta_nabla_w = self.backprop(x, y)
-			nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
-			nabla_w = [nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
-		self.weights = [(1-eta*weight_decay/len(mini_batch))*w-(eta/len(mini_batch))*nw
+
+		# nabla_b = [np.zeros(b.shape) for b in self.biases]
+		# nabla_w = [np.zeros(w.shape) for w in self.weights]
+
+		mini_batch_length = mini_batch.shape[1]
+		x = mini_batch[0:-1, :]
+		y = mini_batch[-1, :]
+		# print(x.shape)
+		# print(y.shape)
+		# delta_nabla_b, delta_nabla_w = self.backprop(x, y)
+		nabla_b, nabla_w = self.backprop(x, y)
+		self.weights = [(1-eta*weight_decay/mini_batch_length)*w-(eta/len(mini_batch))*nw
 						for w, nw in zip(self.weights, nabla_w)]
-		self.biases = [b-(eta*weight_decay/len(mini_batch))*nb
+		self.biases = [b-(eta*weight_decay/mini_batch_length)*nb
 					   for b, nb in zip(self.biases, nabla_b)]
 
 	def backprop(self, x, y):
@@ -156,7 +160,10 @@ class Network(object):
 		for b, w in zip(self.biases, self.weights):
 			# print("activation shape is: {}".format(activation.shape))
 			# print("w shape is: {}".format(w.shape))
-			z = np.dot(w, activation)+b
+			# print(b.shape)
+			temp = np.dot(b, np.ones((1,activation.shape[1])))
+			z = np.dot(w, activation) + temp
+			# print(w.shape, activation.shape, b.shape, temp.shape, z.shape)
 			# print("z shape is: {}".format(z.shape))
 			zs.append(z)
 			activation = sigmoid(z)
@@ -166,8 +173,9 @@ class Network(object):
 			sigmoid_prime(zs[-1])
 		# print(delta.shape)
 		# print(activations[-2].shape)
-		nabla_b[-1] = delta
+		nabla_b[-1] = np.sum(delta,axis=1)
 		nabla_w[-1] = np.dot(delta, activations[-2].transpose())
+		# print(delta.shape, activations[-2].transpose().shape, nabla_b[-1].shape, nabla_w[-1].shape)
 		# Note that the variable l in the loop below is used a little
 		# differently to the notation in Chapter 2 of the book.  Here,
 		# l = 1 means the last layer of neurons, l = 2 is the
@@ -178,7 +186,8 @@ class Network(object):
 			z = zs[-l]
 			sp = sigmoid_prime(z)
 			delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
-			nabla_b[-l] = delta
+			nabla_b[-l] = np.sum(delta,axis=1).reshape((delta.shape[0],1))
+			# print(sp.shape, nabla_b[-l].shape)
 			nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
 		return (nabla_b, nabla_w)
 
@@ -189,13 +198,14 @@ class Network(object):
 		neuron in the final layer has the highest activation."""
 		# test_results = [(np.argmax(self.feedforward(x)), y)
 		# 				for (x, y) in test_data]
-		for (x, y) in test_data:
-			output = [(float(self.feedforward(x)), y) for (x, y) in test_data]
-			error = [(x-y)*(x-y) for (x, y) in output]
-			error_total = sum(error)/2
-			# test_results = [(threshold(x), y) for (x, y) in output]
-			correct = sum(int((x - y)<0.05) for (x, y) in output)
-		return error_total, correct
+		
+		x = test_data[0:-1, :]
+		y = test_data[-1, :]
+		output = self.feedforward(x)
+		error = output-y
+		mse = np.sum(np.power(error,2)) / 2
+		correct_num = np.sum(error<0.05)
+		return mse, correct_num
 
 	def cost_derivative(self, output_activations, y):
 		"""Return the vector of partial derivatives \partial C_x /
@@ -256,7 +266,7 @@ def data_set_generator():
 		# test_data.append([np.array([[y[i-20]], [y[i-15]], [y[i-10]],[y[i-5]], [y[i]]]), y[i+5]])
 		test_data.append([y[i-20], y[i-15], y[i-10],y[i-5], y[i], y[i+5]])
 
-	return np.array(training_data), validation_data, test_data
+	return np.array(training_data).T, np.array(validation_data).T, np.array(test_data).T
 
 # 主函数
 def main():
@@ -266,8 +276,8 @@ def main():
 	# # learning相关参数
 	eta = 0.3
 	epochs = 1000
-	mini_batch_size = 20
-	weight_decay_lamda = 0
+	mini_batch_size = 50
+	weight_decay_lamda = 0.01
 
 	training_data, validation_data, test_data = data_set_generator()
 	nn.SGD(training_data, epochs, mini_batch_size, eta, weight_decay_lamda, validation_data, test_data)
