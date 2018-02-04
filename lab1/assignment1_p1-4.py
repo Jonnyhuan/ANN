@@ -16,12 +16,26 @@ import random
 # Third-party libraries
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
-TRAIN_DATA_NUM = 100	#训练集大小
-TEST_DATA_NUM = 50		#测试集大小	
-INODE_NUM = 2			#输入层节点数
-HNODE_NUM = 60			#中间层节点数
-ONODE_NUM = 1			#输出层节点数
+USE_TEST_SET = False
+USE_VALID_SET = False
+BATCH_NORM = False
+TRAIN_DATA_NUM = 8	#训练集大小
+VALID_DATA_NUM = 0	#训练集大小
+TEST_DATA_NUM = 0		#测试集大小	
+
+N = 5
+# 2-layer neural network configuration
+N2_INODE_NUM = 2			#输入层节点数
+N2_HNODE_NUM = 12			#中间层节点数
+N2_ONODE_NUM = 1			#输出层节点数
+
+# 3-layer neural network configuration
+N3_INODE_NUM = 5			#输入层节点数
+N3_H1NODE_NUM = 4			#中间层节点数
+N3_H2NODE_NUM = 4			#中间层节点数
+N3_ONODE_NUM = 1			#输出层节点数
 
 
 class Network(object):
@@ -46,11 +60,10 @@ class Network(object):
 	def feedforward(self, a):
 		"""Return the output of the network if ``a`` is input."""
 		for b, w in zip(self.biases, self.weights):
-			a = sigmoid(np.dot(w, a)+b)
+			a = tanh(np.dot(w, a)+b)
 		return a
 
-	def SGD(self, training_data, epochs, mini_batch_size, eta,
-			test_data=None):
+	def SGD(self, training_data, epochs, mini_batch_size, eta, weight_decay = 0, validation_data=None, test_data=None):
 		"""Train the neural network using mini-batch stochastic
 		gradient descent.  The ``training_data`` is a list of tuples
 		``(x, y)`` representing the training inputs and the desired
@@ -59,58 +72,68 @@ class Network(object):
 		network will be evaluated against the test data after each
 		epoch, and partial progress printed out.  This is useful for
 		tracking progress, but slows things down substantially."""
-		if test_data: 
-			n_test = len(test_data)
+
+		if USE_TEST_SET: 
+			n_test = test_data.shape[1]
 			test_error = []
 			test_accuracy = []
-		n = len(training_data)
+		if USE_VALID_SET: 
+			n_valid = validation_data.shape[1]
+			validation_error = []
+			validation_accuracy = []
+
+
+		sub_training_data = training_data[:,0:N*N]
+		n = sub_training_data.shape[1]
 		train_error = []
 		train_accuracy = []
+		stop_epoch = epochs
 		for j in range(epochs):
-			random.shuffle(training_data)
-			mini_batches = [
-				training_data[k:k+mini_batch_size]
-				for k in range(0, n, mini_batch_size)]
-			for mini_batch in mini_batches:
-				self.update_mini_batch(mini_batch, eta)
+			stop_epoch = j
+			# random.shuffle(training_data)
+			for k in range(0, n, mini_batch_size):
+				mini_batch = sub_training_data[:, k:k+mini_batch_size]
+				# print(mini_batch)
+				self.update_mini_batch(mini_batch, eta, weight_decay)
 
-			error, train_correct = self.evaluate(training_data)
-			train_error.append(error)
-			train_accuracy.append(train_correct/n)
+			mse = self.evaluate(training_data)
+			train_error.append(mse)
 
-			if test_data:
-				error, test_correct = self.evaluate(test_data)
-				test_error.append(error)
-				test_accuracy.append(test_correct/n_test)
-				print("Epoch {0}: {1} / {2}".format(j, test_correct, n_test))
-			else:
-				print("Epoch {0} complete".format(j))
+		ax2=plt.subplot(132,projection='3d')  
+		x = sub_training_data[0,:]
+		y = sub_training_data[1,:]
+		output = self.feedforward(sub_training_data[0:-1,:])
+		ax2.plot_trisurf(x,y,output.flatten(),cmap=plt.cm.coolwarm,alpha=0.8)
+		plt.draw() 
 
-		plt.subplot(1,3,2)
-		plt.plot([x for x in range(epochs)], train_accuracy, color="blue", label = "training accuracy", linewidth=2.0, linestyle="-")
-		plt.plot([x for x in range(epochs)], test_accuracy, color="red", label = "test accuracy", linewidth=2.0, linestyle="-")
-		plt.axis([0, epochs, 0, 1.2]) 
-		plt.legend()
-		
-		plt.subplot(1,3,3)
-		plt.plot([x for x in range(epochs)], train_error, color="blue", label = "training error", linewidth=2.0, linestyle="-")
-		plt.plot([x for x in range(epochs)], test_error, color="red", label = "test error", linewidth=2.0, linestyle="-")
-		plt.legend()
+		ax3=plt.subplot(133,projection='3d')  
+		x = training_data[0,:]
+		y = training_data[1,:]
+#		print(training_data[1,:])
+#		print(x,y)
+		output = self.feedforward(training_data[0:-1,:])
+		ax3.plot_trisurf(x,y,output.flatten(),cmap=plt.cm.coolwarm,alpha=0.8)
+		plt.draw() 
+	
 
-	def update_mini_batch(self, mini_batch, eta):
+	def update_mini_batch(self, mini_batch, eta, weight_decay=0):
 		"""Update the network's weights and biases by applying
 		gradient descent using backpropagation to a single mini batch.
 		The ``mini_batch`` is a list of tuples ``(x, y)``, and ``eta``
 		is the learning rate."""
-		nabla_b = [np.zeros(b.shape) for b in self.biases]
-		nabla_w = [np.zeros(w.shape) for w in self.weights]
-		for x, y in mini_batch:
-			delta_nabla_b, delta_nabla_w = self.backprop(x, y)
-			nabla_b = [nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
-			nabla_w = [nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
-		self.weights = [w-(eta/len(mini_batch))*nw
+
+		if BATCH_NORM == True:
+			mini_batch_length = mini_batch.shape[1]
+		else:
+			mini_batch_length = 1
+
+		x = mini_batch[0:-1, :]
+		y = mini_batch[-1, :]
+		# print(x)
+		nabla_b, nabla_w = self.backprop(x, y)
+		self.weights = [(1-eta*weight_decay/mini_batch_length)*w-(eta/len(mini_batch))*nw
 						for w, nw in zip(self.weights, nabla_w)]
-		self.biases = [b-(eta/len(mini_batch))*nb
+		self.biases = [b-(eta*weight_decay/mini_batch_length)*nb
 					   for b, nb in zip(self.biases, nabla_b)]
 
 	def backprop(self, x, y):
@@ -125,19 +148,17 @@ class Network(object):
 		activations = [x] # list to store all the activations, layer by layer
 		zs = [] # list to store all the z vectors, layer by layer
 		for b, w in zip(self.biases, self.weights):
-			# print("activation shape is: {}".format(activation.shape))
-			# print("w shape is: {}".format(w.shape))
-			z = np.dot(w, activation)+b
-			# print("z shape is: {}".format(z.shape))
+			temp = np.dot(b, np.ones((1,activation.shape[1])))
+			# print(w.shape, activation.shape, temp.shape)
+			z = np.dot(w, activation) + temp
 			zs.append(z)
-			activation = sigmoid(z)
+			activation = tanh(z)
 			activations.append(activation)
 		# backward pass
+		# delta = self.cost_derivative(activations[-1], y) 
 		delta = self.cost_derivative(activations[-1], y) * \
-			sigmoid_prime(zs[-1])
-		# print(delta.shape)
-		# print(activations[-2].shape)
-		nabla_b[-1] = delta
+			tanh_prime(zs[-1])
+		nabla_b[-1] = np.sum(delta,axis=1).reshape((delta.shape[0],1))
 		nabla_w[-1] = np.dot(delta, activations[-2].transpose())
 		# Note that the variable l in the loop below is used a little
 		# differently to the notation in Chapter 2 of the book.  Here,
@@ -147,9 +168,9 @@ class Network(object):
 		# that Python can use negative indices in lists.
 		for l in range(2, self.num_layers):
 			z = zs[-l]
-			sp = sigmoid_prime(z)
+			sp = tanh_prime(z)
 			delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
-			nabla_b[-l] = delta
+			nabla_b[-l] = np.sum(delta,axis=1).reshape((delta.shape[0],1))
 			nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
 		return (nabla_b, nabla_w)
 
@@ -160,13 +181,15 @@ class Network(object):
 		neuron in the final layer has the highest activation."""
 		# test_results = [(np.argmax(self.feedforward(x)), y)
 		# 				for (x, y) in test_data]
-		for (x, y) in test_data:
-			output = [(float(self.feedforward(x)), y) for (x, y) in test_data]
-			error = [(x-y)*(x-y) for (x, y) in output]
-			error_total = sum(error)/2
-			test_results = [(threshold(x), y) for (x, y) in output]
-			correct = sum(int(x == y) for (x, y) in test_results)
-		return error_total, correct
+		
+		x = test_data[0:-1, :]
+		y = test_data[-1, :]
+		output = self.feedforward(x)
+		error = output-y
+		mse = np.sum(np.power(error,2)) / 2
+		# test_results = [(np.argmax(x), np.argmax(y)) for (x,y) in zip(output, y)]
+		# correct_num = sum(int(x==y) for (x,y) in test_results)
+		return mse
 
 	def cost_derivative(self, output_activations, y):
 		"""Return the vector of partial derivatives \partial C_x /
@@ -182,77 +205,79 @@ def sigmoid_prime(z):
 	"""Derivative of the sigmoid function."""
 	return sigmoid(z)*(1-sigmoid(z))
 
-def threshold(x):
- 	if x > 0.5:
- 		return 1
- 	else:
- 		return 0
+def tanh(z):
+	return (2.0/(1+np.exp(-z)))-1
 
-# 数据集产生函数
-def data_set_generator(mu1, mu2, sigma1, sigma2):
-	test_data = []
-	for i in range(TEST_DATA_NUM):
-		if random.random() < 0.5:
-			x = random.normalvariate(mu1,sigma1)
-			y = random.normalvariate(mu1,sigma1)
-			# print(np.array([x,y]).shape)
-			test_data.append([np.array([[x],[y]]), -1])
-		else:
-			x = random.normalvariate(mu2,sigma2)
-			y = random.normalvariate(mu2,sigma2)
-			test_data.append([np.array([[x],[y]]), 1])
+def tanh_prime(z):
+	return ((1+tanh(z))*(1-tanh(z)))/2
 
-	train_data = []
-	data_minus_one = []
-	data_one = []
-	for i in range(TRAIN_DATA_NUM):
-		if random.random() < 0.5:
-			x = random.normalvariate(mu1,sigma1)
-			y = random.normalvariate(mu1,sigma1)
-			train_data.append([np.array([[x],[y]]), -1])
-			data_minus_one.append([x,y])
-		else:
-			x = random.normalvariate(mu2,sigma2)
-			y = random.normalvariate(mu2,sigma2)
-			train_data.append([np.array([[x],[y]]), 1])
-			data_one.append([x,y])
+# def threshold(x):
+# 	if x > 0.5:
+# 		return 1
+# 	else:
+# 		return 0
+
+# 3-D高斯函数模拟
+def data_set_generator():
+
+	# fig = plt.figure()
+	ax1=plt.subplot(131,projection='3d')  
+	# ax = Axes3D(fig)
+
+	x = np.linspace(-5.0, 5.0, 20)
+	y = np.linspace(-5.0, 5.0, 20)
 	
-	data_minus_one = np.array(data_minus_one)
-	data_one = np.array(data_one)
-	# for i in range(train_labels):
-	# 	if train_labels[:,i] == 1:
-	# 		data_one[:,i] = train_data[:,i]
-	# 	else:
-	# 		data_minus_one[:,i] = train
-	# print(np.shape(data_one))
-	plt.figure()
-	plt.subplot(1,3,1)
-	plt.scatter(data_minus_one.T[0],data_minus_one.T[1],label='class 0', color='k', s=25, marker="o")
-	plt.scatter(data_one.T[0],data_one.T[1],label='class 1', color='r', s=25, marker="x")
-	plt.legend()
-	# plt.show()
-	return train_data, test_data
+	x,y = np.meshgrid(x,y)
+
+	x = x.flatten()
+	y = y.flatten()
+	z = np.exp(-x**2/10-y**2/10) - 0.5
+	ax1.plot_trisurf(x,y,z,cmap=plt.cm.coolwarm,alpha=0.8)
+
+
+	x = x.reshape((1, x.size))
+	y = y.reshape((1, y.size))
+	z = z.reshape((1, z.size))
+
+	training_data = np.row_stack((x,y,z))
+
+	indices = np.random.permutation(training_data.shape[1])
+	training_data_shuffled = training_data[:,indices]
+
+	# ax4=plt.subplot(224,projection='3d')  
+	# x = training_data_shuffled[0,:]
+	# y = training_data_shuffled[1,:]
+	# # x = training_data_shuffled[0,:].reshape((N,N))
+	# # y = training_data_shuffled[1,:].reshape((N,N))
+	# ax4.plot_trisurf(x,y,training_data_shuffled[2,:],cmap=plt.cm.coolwarm,alpha=0.8)
+	# plt.draw() 
+
+	return training_data_shuffled
+
 
 # 主函数
 def main():
-	sizes = [INODE_NUM, HNODE_NUM, ONODE_NUM]
+	sizes = [N2_INODE_NUM, N2_HNODE_NUM, N2_ONODE_NUM] # 2-layer neural network
 	nn = Network(sizes)
-
-	# 数据集分布参数
-	mu1 = -2
-	mu2 = 2
-	sigma1 = 2
-	sigma2 = 2
 	
-	# learning相关参数
-	eta = 0.1
-	epochs = 100
-	mini_batch_size = 20
+	training_data = data_set_generator()
+		# # learning相关参数
+	eta = 0.05
+	epochs = 10000
+	mini_batch_size = N*N
+	weight_decay_lamda = 0
 
-	train_data, test_data = data_set_generator(mu1, mu2, sigma1, sigma2)
-	nn.SGD(train_data, epochs, mini_batch_size, eta, test_data)
+	nn.SGD(training_data, epochs, mini_batch_size, eta, weight_decay_lamda, training_data, training_data)
 
 	plt.show()
 
 if __name__ == "__main__":
 	main()
+
+
+
+
+
+
+
+

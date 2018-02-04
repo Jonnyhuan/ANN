@@ -54,6 +54,9 @@ def perceptron(x, w, t, eta):
 def sigmoid(x):
 	return 1/(1+np.exp(-x))
 
+def tanh(z):
+	return (2.0/(1+np.exp(-z)))-1
+
 def threshold(x):
 	th = np.zeros(x.shape)
 	th[x>0] = 1
